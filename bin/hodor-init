@@ -17,7 +17,6 @@ const ora = require('ora')
 const download = require('download-git-repo')
 const rm = require('rimraf').sync
 const logger = require('../lib/logger')
-const {promisify} = require('util')
 /**
  * Help.
  */

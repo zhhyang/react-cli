@@ -1,0 +1,116 @@
+#!/usr/bin/env node
+/**
+ * Created by Freeman on 2017/6/15.
+ */
+
+'use strict'
+const path = require('path')
+const chalk = require('chalk')
+const program = require('commander')
+const home = require('user-home')
+const tildify = require('tildify')
+const exists = require('fs').existsSync
+const inquirer = require('inquirer')
+const checkVersion = require('../lib/check-version')
+const request = require('request')
+const ora = require('ora')
+const download = require('download-git-repo')
+const rm = require('rimraf').sync
+const logger = require('../lib/logger')
+const {promisify} = require('util')
+/**
+ * Help.
+ */
+program.on('--help', function () {
+  console.log('  Examples:')
+  console.log()
+  console.log(chalk.gray('    # create a new project with an official template'))
+  console.log('    $ hodor init webpack my-project')
+  console.log()
+  console.log(chalk.gray('    # create a new project straight from a github template'))
+  console.log('    $ hodor init username/repo my-project')
+  console.log()
+})
+
+console.log()
+process.on('exit', function () {
+  console.log()
+})
+
+function choiceTemplate (templates) {
+  return inquirer.prompt([{
+    type: 'list',
+    message: 'What do you want to do?',
+    choices: templates,
+    name: 'template'
+  }]).then(function (answers) {
+    return answers.template
+  })
+}
+
+function appName () {
+  return inquirer.prompt([{
+    type: 'input',
+    message: 'What`s your name ?',
+    name: 'app_name'
+  }]).then(function (answers) {
+    return answers.app_name
+  })
+}
+
+function downloadAndGenerate (template,clone) {
+  const tmp = path.join(home, '.hodor-templates', template.replace(/\//g, '-'))
+  const spinner = ora('downloading template')
+  spinner.start()
+  // Remove if local template exists
+  if (exists(tmp)) rm(tmp)
+  download(`https://github.com:mff-fe-templates/${template}`, tmp, {clone: true}, function (err) {
+    spinner.stop()
+    if (err) logger.fatal('Failed to download repo ' + template + ': ' + err.message.trim())
+    console.log()
+    logger.success('Generated "%s".', name)
+  })
+}
+
+function run () {
+  checkVersion(function () {
+    request({
+      url: 'https://api.github.com/users/mff-fe-templates/repos',
+      headers: {
+        'User-Agent': 'hodor-cli'
+      }
+    }, function (err, res, body) {
+      if (err) logger.fatal(err)
+      const requestBody = JSON.parse(body)
+      if (Array.isArray(requestBody)) {
+        console.log('  fetch official templates ok ')
+        console.log()
+        let choices = []
+        requestBody.forEach(function (repo) {
+          choices.push(repo.name)
+        })
+        choiceTemplate(choices).then(choice =>{
+          appName().then(app_name =>{
+            if (exists(path.resolve(app_name))) {
+              inquirer.prompt([{
+                type: 'confirm',
+                message: 'Target directory exists. Continue?',
+                name: 'ok'
+              }], function (answers) {
+                if (answers.ok) {
+                  downloadAndGenerate(choice,app_name)
+                }
+              })
+            } else {
+              logger.log('here ...')
+              downloadAndGenerate(choice,app_name)
+            }
+          })
+        })
+      }
+    })
+  })
+}
+
+run()
+
